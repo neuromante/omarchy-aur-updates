@@ -13,6 +13,8 @@ button to run the update.
 - Arch logo in the bar, with a count badge when updates are available.
 - Automatic background check every hour (configurable).
 - Popup listing each upgradable package as `installed → latest`.
+- Package names are hyperlinks to their AUR page: clicking one opens it in your
+  default browser.
 - "Update with yay" button that runs the configured command in a floating
   terminal.
 - Hover tooltip summarising the pending updates.
@@ -51,6 +53,8 @@ omarchy plugin enable neuromante.aur-updates
 - **Left click** the Arch icon: open or close the detail popup.
 - **Middle click**: force an immediate check.
 - Inside the popup: `r` re-checks, `Esc` closes, arrow keys scroll the list.
+- **Click a package name** in the popup: open its `aur.archlinux.org` page in
+  the default browser.
 - The button launches the configured update command in a floating terminal.
 
 ## Settings
@@ -108,4 +112,9 @@ manifest.json     Plugin manifest (id, entry points, settings schema)
 BarWidget.qml     Bar icon, badge, polling, panel wiring
 Panel.qml         Detail popup (package list + update button)
 bin/aur-updates   yay query wrapper -> JSON
+CHANGELOG.md      Release history
 ```
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).

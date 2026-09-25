@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -18,7 +19,7 @@ Panel {
   readonly property var barObj: root.bar
   readonly property color fg: barObj ? barObj.foreground : Color.foreground
   readonly property color dim: Qt.darker(fg, 1.4)
-  readonly property color accent: barObj ? barObj.urgent : Color.urgent
+  readonly property color accent: Color.accent
   readonly property string family: barObj ? barObj.fontFamily : Style.font.family
 
   readonly property var packages: hostWidget ? hostWidget.packages : []
@@ -49,6 +50,30 @@ Panel {
   function runUpdate() {
     if (root.hostWidget && root.hostWidget.runUpdate) root.hostWidget.runUpdate()
     root.close()
+  }
+
+  function packageUrl(name) {
+    var pkg = String(name || "")
+    if (pkg === "") return ""
+    return "https://aur.archlinux.org/packages/" + encodeURIComponent(pkg)
+  }
+
+  function openPackage(name) {
+    var url = root.packageUrl(name)
+    if (url !== "") root.openExternal(url)
+  }
+
+  // Open an http(s) URL in the default browser. QDesktopServices can silently
+  // no-op under some session setups, so fall back to a detached xdg-open when
+  // it reports failure.
+  property Process xdgOpenProcess: Process {}
+  function openExternal(url) {
+    var u = String(url || "")
+    if (!/^https?:\/\//.test(u)) return
+    if (!Qt.openUrlExternally(u)) {
+      xdgOpenProcess.command = ["xdg-open", u]
+      xdgOpenProcess.running = true
+    }
   }
 
   KeyboardPanel {
@@ -151,6 +176,8 @@ Panel {
                   opacity: 0.08
                 }
 
+                // Package name is a hyperlink to its AUR page; clicking it
+                // opens the default browser.
                 Text {
                   id: nameText
                   anchors.left: parent.left
@@ -161,9 +188,26 @@ Panel {
                   textFormat: Text.PlainText
                   text: modelData.name
                   elide: Text.ElideRight
-                  color: root.fg
+                  color: nameArea.containsMouse ? root.accent : root.fg
                   font.family: root.family
                   font.pixelSize: Style.font.body
+                  font.underline: nameArea.containsMouse
+
+                  Behavior on color { ColorAnimation { duration: 100 } }
+
+                  MouseArea {
+                    id: nameArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.openPackage(modelData.name)
+                  }
+
+                  PanelToolTip {
+                    visible: nameArea.containsMouse && root.packageUrl(modelData.name) !== ""
+                    text: root.packageUrl(modelData.name)
+                    fontFamily: root.family
+                  }
                 }
 
                 Text {
