@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "neuromante.aur-updates",
   "name": "AUR updates",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "neuromante",
   "description": "Controlla a intervalli regolari se i pacchetti AUR installati sono aggiornabili, li elenca con la versione piu recente e un link alla pagina AUR, e permette di lanciare l'aggiornamento con yay.",
   "kinds": [

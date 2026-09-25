@@ -5,6 +5,14 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-09-25
+
+### Changed
+
+- Removed the redundant refresh icon in the popup header; the bottom
+  "Controlla adesso" button is now the single way to trigger a check.
+- Slightly shrunk the pending-updates count badge on the bar icon.
+
 ## [1.1.0] - 2026-09-25
 
 ### Added
@@ -27,5 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Update with yay" button running the configurable `updateCommand` in a
   floating terminal.
 
+[1.1.1]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/neuromante/omarchy-aur-updates/releases/tag/v1.0.0

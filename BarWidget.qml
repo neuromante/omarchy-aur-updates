@@ -164,8 +164,8 @@ BarWidget {
 
     readonly property string countText: root.count > 9 ? "9+" : String(root.count)
 
-    implicitWidth: Math.max(Style.space(14), badgeLabel.implicitWidth + Style.space(6))
-    implicitHeight: Style.space(14)
+    implicitWidth: Math.max(Style.space(12), badgeLabel.implicitWidth + Style.space(5))
+    implicitHeight: Style.space(12)
     radius: height / 2
     color: root.bar ? root.bar.urgent : Color.urgent
     border.width: 1
@@ -177,7 +177,7 @@ BarWidget {
       text: parent.countText
       color: Color.background
       font.family: root.bar ? root.bar.fontFamily : Style.font.family
-      font.pixelSize: Style.font.caption * 0.85
+      font.pixelSize: Style.font.caption * 0.72
       font.bold: true
     }
   }

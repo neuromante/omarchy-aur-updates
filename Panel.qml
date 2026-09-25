@@ -123,7 +123,6 @@ Panel {
                   : "Tutti i pacchetti AUR sono aggiornati"))
             foreground: root.fg
             fontFamily: root.family
-            trailingControl: refreshControl
           }
 
           Rectangle {
@@ -303,13 +302,4 @@ Panel {
     }
   }
 
-  Component {
-    id: refreshControl
-    PanelActionButton {
-      iconText: "\uf021"
-      foreground: root.fg
-      tooltipText: "Controlla adesso"
-      onClicked: root.refreshNow()
-    }
-  }
 }
