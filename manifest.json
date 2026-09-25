@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "neuromante.aur-updates",
+  "name": "AUR updates",
+  "version": "1.0.0",
+  "author": "neuromante",
+  "description": "Controlla a intervalli regolari se i pacchetti AUR installati sono aggiornabili, li elenca con la versione piu recente e permette di lanciare l'aggiornamento con yay.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "AUR updates",
+    "description": "Icona Arch con il numero di pacchetti AUR aggiornabili e popup con dettagli e pulsante yay",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "intervalHours": 1,
+      "updateCommand": "yay -Sua"
+    },
+    "schema": [
+      {
+        "key": "intervalHours",
+        "type": "integer",
+        "label": "Intervallo controllo (ore)",
+        "description": "Ogni quante ore controllare gli aggiornamenti dei pacchetti AUR.",
+        "min": 1,
+        "max": 24,
+        "step": 1,
+        "defaultValue": 1
+      },
+      {
+        "key": "updateCommand",
+        "type": "string",
+        "label": "Comando aggiornamento",
+        "description": "Comando eseguito dal pulsante, in un terminale flottante. yay -Sua aggiorna i soli pacchetti AUR installati.",
+        "defaultValue": "yay -Sua"
+      }
+    ]
+  }
+}

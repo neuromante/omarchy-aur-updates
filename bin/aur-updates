@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Report installed AUR (foreign) packages that have an update available.
+
+Runs `yay -Qua` and emits a single JSON object on stdout:
+
+    {"count": N, "packages": [{"name", "current", "latest"}],
+     "error": "", "checked": <epoch seconds>}
+
+`yay -Qua` queries the AUR RPC for the installed foreign packages, so it does
+not need a root-owned sync nor a prior `-Sy`. Everything the widget draws comes
+from this JSON; the QML side never parses yay output itself.
+"""
+
+import json
+import shutil
+import subprocess
+import sys
+import time
+
+TIMEOUT_SECONDS = 120
+
+
+def emit(result):
+    print(json.dumps(result))
+    sys.exit(0)
+
+
+def parse_line(line):
+    """Parse one `yay -Qua` line: "<name> <current> -> <latest>"."""
+    line = line.replace(" [ignored]", "").strip()
+    head, sep, tail = line.partition(" -> ")
+    if not sep:
+        # Unknown shape: keep the raw line so nothing is silently dropped.
+        return {"name": line, "current": "", "latest": ""}
+    head_parts = head.split()
+    tail_parts = tail.split()
+    return {
+        "name": head_parts[0] if head_parts else line,
+        "current": head_parts[1] if len(head_parts) > 1 else "",
+        "latest": tail_parts[0] if tail_parts else "",
+    }
+
+
+def main():
+    result = {"count": 0, "packages": [], "error": "", "checked": int(time.time())}
+
+    if not shutil.which("yay"):
+        result["error"] = "yay non trovato"
+        emit(result)
+
+    try:
+        proc = subprocess.run(
+            ["yay", "-Qua", "--color", "never"],
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        result["error"] = "Timeout nella query AUR"
+        emit(result)
+    except Exception as exc:  # noqa: BLE001 - surface any failure in the UI
+        result["error"] = str(exc)
+        emit(result)
+
+    packages = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if line:
+            packages.append(parse_line(line))
+
+    # `yay -Qua` exits non-zero when there is simply nothing to report, so the
+    # return code alone is not an error. Only surface real stderr output.
+    stderr = (proc.stderr or "").strip().splitlines()
+    if not packages and stderr:
+        result["error"] = stderr[-1]
+
+    result["packages"] = packages
+    result["count"] = len(packages)
+    emit(result)
+
+
+if __name__ == "__main__":
+    main()
