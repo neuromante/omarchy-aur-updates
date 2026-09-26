@@ -52,6 +52,99 @@ Panel {
     root.close()
   }
 
+  // ---------------------------------------------------------------- changelog
+
+  // Recent upstream commit subjects per package, resolved lazily while the
+  // popup is open and cached by bin/aur-changelog. The map is keyed by package
+  // name. `expandedChangelogs` remembers which excerpts the user opened.
+  property var changelogs: ({})
+  property var expandedChangelogs: ({})
+  property bool changelogsLoading: false
+  property bool changelogsPending: false
+
+  readonly property string changelogScript:
+    Qt.resolvedUrl("bin/aur-changelog").toString().replace("file://", "")
+
+  function hasChangelog(name) {
+    var entry = root.changelogs[name]
+    return !!(entry && entry.available && entry.commits && entry.commits.length > 0)
+  }
+
+  function isChangelogExpanded(name) {
+    return root.expandedChangelogs[name] === true
+  }
+
+  function toggleChangelog(name) {
+    var next = {}
+    for (var key in root.expandedChangelogs) next[key] = root.expandedChangelogs[key]
+    next[name] = !root.isChangelogExpanded(name)
+    root.expandedChangelogs = next
+  }
+
+  function changelogText(name) {
+    var entry = root.changelogs[name]
+    if (!entry || !entry.commits) return ""
+    var lines = []
+    for (var i = 0; i < entry.commits.length; i++) {
+      var subject = String(entry.commits[i].subject || "")
+      if (subject !== "") lines.push("• " + subject)
+    }
+    return lines.join("\n")
+  }
+
+  function fetchChangelogs() {
+    if (changelogProc.running) {
+      root.changelogsPending = true
+      return
+    }
+    var names = []
+    for (var i = 0; i < root.packages.length; i++) {
+      var name = String(root.packages[i].name || "")
+      if (name !== "") names.push(name)
+    }
+    if (names.length === 0) {
+      root.changelogs = {}
+      return
+    }
+    root.changelogsLoading = true
+    changelogProc.command = [root.changelogScript].concat(names)
+    changelogProc.running = true
+  }
+
+  onOpenedChanged: {
+    if (root.opened) root.fetchChangelogs()
+  }
+
+  onPackagesChanged: {
+    // A fresh update list invalidates the excerpts. Only fetch while visible.
+    if (root.opened) root.fetchChangelogs()
+    else root.changelogs = {}
+  }
+
+  property Process changelogProc: Process {
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var parsed = null
+        try {
+          parsed = JSON.parse(text || "{}")
+        } catch (e) {
+          parsed = null
+        }
+        root.changelogs = (parsed && typeof parsed === "object") ? parsed : {}
+      }
+    }
+    onRunningChanged: {
+      if (!running) {
+        root.changelogsLoading = false
+        if (root.changelogsPending) {
+          root.changelogsPending = false
+          root.fetchChangelogs()
+        }
+      }
+    }
+  }
+
   function packageUrl(name) {
     var pkg = String(name || "")
     if (pkg === "") return ""
@@ -159,95 +252,161 @@ Panel {
             Repeater {
               model: root.packages
 
-              Item {
+              Column {
                 required property var modelData
                 required property int index
 
                 width: content.width
-                height: Style.space(42)
+                spacing: 0
 
-                Rectangle {
-                  anchors.fill: parent
-                  visible: index < root.packages.length - 1
-                  anchors.bottomMargin: -Style.spacing.hairline
-                  height: Style.spacing.hairline
-                  color: root.fg
-                  opacity: 0.08
+                // ---- package name (AUR link) + versions -------------------
+                Item {
+                  width: parent.width
+                  height: Style.space(42)
+
+                  // Package name is a hyperlink to its AUR page; clicking it
+                  // opens the default browser.
+                  Text {
+                    id: nameText
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(4)
+                    anchors.right: versionRow.left
+                    anchors.rightMargin: Style.space(12)
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: modelData.name
+                    elide: Text.ElideRight
+                    color: nameArea.containsMouse ? root.accent : root.fg
+                    font.family: root.family
+                    font.pixelSize: Style.font.body
+                    font.underline: nameArea.containsMouse
+
+                    Behavior on color { ColorAnimation { duration: 100 } }
+
+                    MouseArea {
+                      id: nameArea
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.openPackage(modelData.name)
+                    }
+
+                    PanelToolTip {
+                      visible: nameArea.containsMouse && root.packageUrl(modelData.name) !== ""
+                      text: root.packageUrl(modelData.name)
+                      fontFamily: root.family
+                    }
+                  }
+
+                  Text {
+                    id: latestText
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(4)
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    text: modelData.latest !== "" ? modelData.latest : "—"
+                    color: root.accent
+                    font.family: root.family
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                  }
+
+                  Row {
+                    id: versionRow
+                    anchors.right: latestText.left
+                    anchors.rightMargin: Style.space(6)
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Style.space(6)
+
+                    Text {
+                      textFormat: Text.PlainText
+                      text: modelData.current
+                      color: root.dim
+                      font.family: root.family
+                      font.pixelSize: Style.font.bodySmall
+                      anchors.verticalCenter: parent.verticalCenter
+                      elide: Text.ElideRight
+                      width: Math.min(implicitWidth, Style.space(130))
+                    }
+
+                    Text {
+                      textFormat: Text.PlainText
+                      text: "→"
+                      color: root.dim
+                      font.family: root.family
+                      font.pixelSize: Style.font.bodySmall
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                  }
                 }
 
-                // Package name is a hyperlink to its AUR page; clicking it
-                // opens the default browser.
-                Text {
-                  id: nameText
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(4)
-                  anchors.right: versionRow.left
-                  anchors.rightMargin: Style.space(12)
-                  anchors.verticalCenter: parent.verticalCenter
-                  textFormat: Text.PlainText
-                  text: modelData.name
-                  elide: Text.ElideRight
-                  color: nameArea.containsMouse ? root.accent : root.fg
-                  font.family: root.family
-                  font.pixelSize: Style.font.body
-                  font.underline: nameArea.containsMouse
+                // ---- changelog excerpt (max 2 lines, expandable) ----------
+                Item {
+                  width: parent.width
+                  visible: root.hasChangelog(modelData.name)
+                  height: visible ? implicitHeight : 0
+                  implicitHeight: changelogColumn.implicitHeight + Style.space(10)
 
-                  Behavior on color { ColorAnimation { duration: 100 } }
+                  Column {
+                    id: changelogColumn
+                    anchors.left: parent.left
+                    anchors.leftMargin: Style.space(4)
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(4)
+                    anchors.top: parent.top
+                    anchors.topMargin: Style.space(2)
+                    spacing: Style.space(2)
+
+                    Row {
+                      spacing: Style.space(4)
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: "Changelog"
+                        color: root.dim
+                        font.family: root.family
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: root.isChangelogExpanded(modelData.name) ? "▴" : "▾"
+                        color: root.dim
+                        font.family: root.family
+                        font.pixelSize: Style.font.caption
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
+
+                    Text {
+                      width: parent.width
+                      textFormat: Text.PlainText
+                      wrapMode: Text.WordWrap
+                      text: root.changelogText(modelData.name)
+                      maximumLineCount: root.isChangelogExpanded(modelData.name) ? 1000 : 2
+                      elide: root.isChangelogExpanded(modelData.name) ? Text.ElideNone : Text.ElideRight
+                      color: Qt.darker(root.fg, 1.25)
+                      font.family: root.family
+                      font.pixelSize: Style.font.bodySmall
+                    }
+                  }
 
                   MouseArea {
-                    id: nameArea
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.openPackage(modelData.name)
-                  }
-
-                  PanelToolTip {
-                    visible: nameArea.containsMouse && root.packageUrl(modelData.name) !== ""
-                    text: root.packageUrl(modelData.name)
-                    fontFamily: root.family
+                    onClicked: root.toggleChangelog(modelData.name)
                   }
                 }
 
-                Text {
-                  id: latestText
-                  anchors.right: parent.right
-                  anchors.rightMargin: Style.space(4)
-                  anchors.verticalCenter: parent.verticalCenter
-                  textFormat: Text.PlainText
-                  text: modelData.latest !== "" ? modelData.latest : "—"
-                  color: root.accent
-                  font.family: root.family
-                  font.pixelSize: Style.font.body
-                  font.bold: true
-                }
-
-                Row {
-                  id: versionRow
-                  anchors.right: latestText.left
-                  anchors.rightMargin: Style.space(6)
-                  anchors.verticalCenter: parent.verticalCenter
-                  spacing: Style.space(6)
-
-                  Text {
-                    textFormat: Text.PlainText
-                    text: modelData.current
-                    color: root.dim
-                    font.family: root.family
-                    font.pixelSize: Style.font.bodySmall
-                    anchors.verticalCenter: parent.verticalCenter
-                    elide: Text.ElideRight
-                    width: Math.min(implicitWidth, Style.space(130))
-                  }
-
-                  Text {
-                    textFormat: Text.PlainText
-                    text: "→"
-                    color: root.dim
-                    font.family: root.family
-                    font.pixelSize: Style.font.bodySmall
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
+                Rectangle {
+                  width: parent.width
+                  height: Style.spacing.hairline
+                  color: root.fg
+                  opacity: 0.08
+                  visible: index < root.packages.length - 1
                 }
               }
             }

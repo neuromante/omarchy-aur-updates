@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+"""Fetch a short upstream changelog (recent commit subjects) for AUR packages.
+
+Usage:  aur-changelog <pkg> [<pkg> ...]
+
+For every package it resolves the upstream URL from the AUR RPC. When that URL
+points at a GitHub or GitLab repository, the most recent commits are fetched and
+returned as a list of subjects. Anything else (or a failure) yields an
+"available": false entry, so the widget can simply skip it.
+
+Results are cached for CACHE_TTL seconds to stay well within the unauthenticated
+GitHub API rate limit when the popup is reopened.
+
+Output (stdout, one JSON object):
+
+    {"<pkg>": {"available": true, "repo": "<url>",
+               "commits": [{"sha": "...", "subject": "...", "date": "YYYY-MM-DD"}],
+               "error": ""}, ...}
+"""
+
+import json
+import os
+import re
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+COMMIT_COUNT = 8
+FETCH_COUNT = 20
+CACHE_TTL = 6 * 3600
+CACHE_DIR = os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
+    "omarchy-aur-updates",
+)
+CACHE_FILE = os.path.join(CACHE_DIR, "changelogs.json")
+USER_AGENT = "omarchy-aur-updates (+https://github.com/neuromante/omarchy-aur-updates)"
+
+
+def http_json(url, timeout=15):
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.load(response)
+
+
+def load_cache():
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_cache(cache):
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        tmp = CACHE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(cache, handle)
+        os.replace(tmp, CACHE_FILE)
+    except Exception:
+        pass
+
+
+def aur_urls(names):
+    query = "&".join("arg[]=" + urllib.parse.quote(name) for name in names)
+    data = http_json("https://aur.archlinux.org/rpc/v5/info?" + query)
+    urls = {}
+    for result in data.get("results", []):
+        urls[result.get("Name", "")] = (result.get("URL") or "").strip()
+    return urls
+
+
+def is_noise(subject):
+    """Skip merge commits: they carry no changelog information."""
+    return subject.strip().lower().startswith("merge ")
+
+
+def github_repo(url):
+    match = re.match(r"https?://(?:www\.)?github\.com/([^/]+)/([^/#?]+)", url)
+    if not match:
+        return None
+    return match.group(1), re.sub(r"\.git$", "", match.group(2))
+
+
+def gitlab_project(url):
+    match = re.match(r"https?://(?:www\.)?gitlab\.com/(.+)", url)
+    if not match:
+        return None
+    path = re.sub(r"\.git$", "", match.group(1))
+    path = path.split("/-/")[0].strip("/")
+    return path or None
+
+
+def github_commits(owner, repo):
+    data = http_json(
+        "https://api.github.com/repos/%s/%s/commits?per_page=%d"
+        % (urllib.parse.quote(owner), urllib.parse.quote(repo), FETCH_COUNT)
+    )
+    commits = []
+    for item in data:
+        message = (item.get("commit", {}).get("message") or "").strip()
+        subject = message.splitlines()[0] if message else ""
+        if not subject or is_noise(subject):
+            continue
+        commits.append(
+            {
+                "sha": (item.get("sha") or "")[:7],
+                "subject": subject,
+                "date": (item.get("commit", {}).get("author", {}).get("date") or "")[:10],
+            }
+        )
+        if len(commits) >= COMMIT_COUNT:
+            break
+    return commits
+
+
+def gitlab_commits(path):
+    project = urllib.parse.quote(path, safe="")
+    data = http_json(
+        "https://gitlab.com/api/v4/projects/%s/repository/commits?per_page=%d"
+        % (project, FETCH_COUNT)
+    )
+    commits = []
+    for item in data:
+        subject = item.get("title") or (item.get("message") or "").splitlines()[0]
+        subject = (subject or "").strip()
+        if not subject or is_noise(subject):
+            continue
+        commits.append(
+            {
+                "sha": (item.get("short_id") or item.get("id") or "")[:7],
+                "subject": subject,
+                "date": (item.get("committed_date") or "")[:10],
+            }
+        )
+        if len(commits) >= COMMIT_COUNT:
+            break
+    return commits
+
+
+def lookup(name, url):
+    value = {"available": False, "repo": url, "commits": [], "error": ""}
+    try:
+        github = github_repo(url)
+        if github:
+            value["commits"] = github_commits(*github)
+        else:
+            gitlab = gitlab_project(url)
+            if gitlab:
+                value["commits"] = gitlab_commits(gitlab)
+        value["available"] = len(value["commits"]) > 0
+    except Exception as exc:  # noqa: BLE001 - surfaced as "not available" in the UI
+        value["error"] = str(exc)
+    return value
+
+
+def main():
+    names = sys.argv[1:]
+    if not names:
+        print("{}")
+        return
+
+    cache = load_cache()
+    try:
+        urls = aur_urls(names)
+    except Exception:
+        urls = {}
+
+    out = {}
+    for name in names:
+        cached = cache.get(name)
+        if cached and (time.time() - cached.get("fetched", 0)) < CACHE_TTL:
+            out[name] = cached.get("value", {})
+            continue
+        value = lookup(name, urls.get(name, ""))
+        out[name] = value
+        cache[name] = {"fetched": time.time(), "value": value}
+
+    save_cache(cache)
+    print(json.dumps(out))
+
+
+if __name__ == "__main__":
+    main()

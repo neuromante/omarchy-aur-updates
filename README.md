@@ -15,6 +15,8 @@ button to run the update.
 - Popup listing each upgradable package as `installed → latest`.
 - Package names are hyperlinks to their AUR page: clicking one opens it in your
   default browser.
+- A short per-package changelog when available: up to two lines, expandable on
+  click. At the moment this only works for projects hosted on GitHub.
 - "Update with yay" button that runs the configured command in a floating
   terminal.
 - Hover tooltip summarising the pending updates.
@@ -24,7 +26,7 @@ button to run the update.
 
 - Omarchy (the Quickshell-based shell), with `omarchy plugin` available.
 - [`yay`](https://github.com/Jguer/yay) for the AUR queries and updates.
-- `python3` for the helper script (`bin/aur-updates`).
+- `python3` for the helper scripts (`bin/aur-updates`, `bin/aur-changelog`).
 
 ## Installation
 
@@ -55,6 +57,8 @@ omarchy plugin enable neuromante.aur-updates
 - Inside the popup: `r` re-checks, `Esc` closes, arrow keys scroll the list.
 - **Click a package name** in the popup: open its `aur.archlinux.org` page in
   the default browser.
+- **Click a package's changelog** in the popup: expand it to the full list of
+  recent commits (click again to collapse).
 - The button launches the configured update command in a floating terminal;
   when it exits, the widget re-checks automatically, so a successful update
   clears the badge right away.
@@ -107,14 +111,24 @@ help. If you use a wrapper or alias, point the widget at it with
 to `Panel.qml`, which only handles presentation. The QML side never parses yay
 output itself.
 
+### Changelog availability
+
+The per-package changelog is, for now, **only available for applications
+published on GitHub**. `bin/aur-changelog` resolves each package's upstream URL
+from the AUR RPC and, when that URL points at a GitHub repository, returns the
+most recent commit subjects (merge commits are skipped). Results are cached for
+six hours to stay within the unauthenticated GitHub API rate limit. Packages
+whose upstream is not on GitHub simply show no changelog.
+
 ## Repository layout
 
 ```
-manifest.json     Plugin manifest (id, entry points, settings schema)
-BarWidget.qml     Bar icon, badge, polling, panel wiring
-Panel.qml         Detail popup (package list + update button)
-bin/aur-updates   yay query wrapper -> JSON
-CHANGELOG.md      Release history
+manifest.json      Plugin manifest (id, entry points, settings schema)
+BarWidget.qml      Bar icon, badge, polling, panel wiring
+Panel.qml          Detail popup (package list + update button)
+bin/aur-updates    yay query wrapper -> JSON
+bin/aur-changelog  upstream commit subjects -> JSON
+CHANGELOG.md       Release history
 ```
 
 ## Changelog
