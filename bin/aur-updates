@@ -12,12 +12,14 @@ from this JSON; the QML side never parses yay output itself.
 """
 
 import json
+import re
 import shutil
 import subprocess
 import sys
 import time
 
 TIMEOUT_SECONDS = 120
+PACKAGE_LINE = re.compile(r"^(\S+)\s+(\S+)\s+->\s+(\S+)(?:\s+\[ignored\])?$")
 
 
 def emit(result):
@@ -26,19 +28,44 @@ def emit(result):
 
 
 def parse_line(line):
-    """Parse one `yay -Qua` line: "<name> <current> -> <latest>"."""
-    line = line.replace(" [ignored]", "").strip()
-    head, sep, tail = line.partition(" -> ")
-    if not sep:
-        # Unknown shape: keep the raw line so nothing is silently dropped.
-        return {"name": line, "current": "", "latest": ""}
-    head_parts = head.split()
-    tail_parts = tail.split()
+    """Parse one `yay -Qua` line, or return None for unrecognized output."""
+    match = PACKAGE_LINE.fullmatch(line.strip())
+    if not match:
+        return None
     return {
-        "name": head_parts[0] if head_parts else line,
-        "current": head_parts[1] if len(head_parts) > 1 else "",
-        "latest": tail_parts[0] if tail_parts else "",
+        "name": match.group(1),
+        "current": match.group(2),
+        "latest": match.group(3),
     }
+
+
+def read_result(proc, result):
+    """Parse yay output while distinguishing an empty result from failures."""
+    packages = []
+    unrecognized = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        package = parse_line(line)
+        if package is None:
+            unrecognized.append(line)
+        else:
+            packages.append(package)
+
+    stderr = (proc.stderr or "").strip().splitlines()
+    if unrecognized:
+        result["error"] = "Output yay non riconosciuto: " + unrecognized[-1]
+    elif proc.returncode != 0 and (packages or stderr):
+        result["error"] = stderr[-1] if stderr else f"yay è terminato con codice {proc.returncode}"
+    elif not packages and stderr:
+        result["error"] = stderr[-1]
+    elif proc.returncode not in (0, 1):
+        result["error"] = f"yay è terminato con codice {proc.returncode}"
+
+    result["packages"] = packages
+    result["count"] = len(packages)
+    return result
 
 
 def main():
@@ -62,20 +89,9 @@ def main():
         result["error"] = str(exc)
         emit(result)
 
-    packages = []
-    for line in proc.stdout.splitlines():
-        line = line.strip()
-        if line:
-            packages.append(parse_line(line))
-
-    # `yay -Qua` exits non-zero when there is simply nothing to report, so the
-    # return code alone is not an error. Only surface real stderr output.
-    stderr = (proc.stderr or "").strip().splitlines()
-    if not packages and stderr:
-        result["error"] = stderr[-1]
-
-    result["packages"] = packages
-    result["count"] = len(packages)
+    # `yay -Qua` uses status 1 when there is simply nothing to report. Other
+    # non-zero statuses, malformed output, or stderr are surfaced as errors.
+    read_result(proc, result)
     emit(result)
 
 

@@ -8,8 +8,8 @@ points at a GitHub or GitLab repository, the most recent commits are fetched and
 returned as a list of subjects. Anything else (or a failure) yields an
 "available": false entry, so the widget can simply skip it.
 
-Results are cached for CACHE_TTL seconds to stay well within the unauthenticated
-GitHub API rate limit when the popup is reopened.
+Successful results are cached for CACHE_TTL seconds; failures use the shorter
+ERROR_CACHE_TTL. The full lookup is limited by TOTAL_TIMEOUT_SECONDS.
 
 Output (stdout, one JSON object):
 
@@ -29,6 +29,9 @@ import urllib.request
 COMMIT_COUNT = 8
 FETCH_COUNT = 20
 CACHE_TTL = 6 * 3600
+ERROR_CACHE_TTL = 5 * 60
+REQUEST_TIMEOUT_SECONDS = 10
+TOTAL_TIMEOUT_SECONDS = 30
 CACHE_DIR = os.path.join(
     os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
     "omarchy-aur-updates",
@@ -37,12 +40,21 @@ CACHE_FILE = os.path.join(CACHE_DIR, "changelogs.json")
 USER_AGENT = "omarchy-aur-updates (+https://github.com/neuromante/omarchy-aur-updates)"
 
 
-def http_json(url, timeout=15):
+def request_timeout(deadline):
+    if deadline is None:
+        return REQUEST_TIMEOUT_SECONDS
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Tempo massimo per i changelog esaurito")
+    return min(REQUEST_TIMEOUT_SECONDS, remaining)
+
+
+def http_json(url, deadline=None):
     request = urllib.request.Request(
         url,
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=request_timeout(deadline)) as response:
         return json.load(response)
 
 
@@ -66,9 +78,9 @@ def save_cache(cache):
         pass
 
 
-def aur_urls(names):
+def aur_urls(names, deadline=None):
     query = "&".join("arg[]=" + urllib.parse.quote(name) for name in names)
-    data = http_json("https://aur.archlinux.org/rpc/v5/info?" + query)
+    data = http_json("https://aur.archlinux.org/rpc/v5/info?" + query, deadline)
     urls = {}
     for result in data.get("results", []):
         urls[result.get("Name", "")] = (result.get("URL") or "").strip()
@@ -96,10 +108,11 @@ def gitlab_project(url):
     return path or None
 
 
-def github_commits(owner, repo):
+def github_commits(owner, repo, deadline=None):
     data = http_json(
         "https://api.github.com/repos/%s/%s/commits?per_page=%d"
-        % (urllib.parse.quote(owner), urllib.parse.quote(repo), FETCH_COUNT)
+        % (urllib.parse.quote(owner), urllib.parse.quote(repo), FETCH_COUNT),
+        deadline,
     )
     commits = []
     for item in data:
@@ -119,11 +132,12 @@ def github_commits(owner, repo):
     return commits
 
 
-def gitlab_commits(path):
+def gitlab_commits(path, deadline=None):
     project = urllib.parse.quote(path, safe="")
     data = http_json(
         "https://gitlab.com/api/v4/projects/%s/repository/commits?per_page=%d"
-        % (project, FETCH_COUNT)
+        % (project, FETCH_COUNT),
+        deadline,
     )
     commits = []
     for item in data:
@@ -143,43 +157,76 @@ def gitlab_commits(path):
     return commits
 
 
-def lookup(name, url):
+def lookup(name, url, deadline=None):
     value = {"available": False, "repo": url, "commits": [], "error": ""}
     try:
         github = github_repo(url)
         if github:
-            value["commits"] = github_commits(*github)
+            value["commits"] = github_commits(*github, deadline=deadline)
         else:
             gitlab = gitlab_project(url)
             if gitlab:
-                value["commits"] = gitlab_commits(gitlab)
+                value["commits"] = gitlab_commits(gitlab, deadline=deadline)
         value["available"] = len(value["commits"]) > 0
     except Exception as exc:  # noqa: BLE001 - surfaced as "not available" in the UI
         value["error"] = str(exc)
     return value
 
 
+def cache_is_fresh(cached, now=None):
+    if not isinstance(cached, dict) or not isinstance(cached.get("value"), dict):
+        return False
+    try:
+        fetched = float(cached.get("fetched", 0))
+    except (TypeError, ValueError):
+        return False
+    if now is None:
+        now = time.time()
+    value = cached["value"]
+    ttl = ERROR_CACHE_TTL if value.get("error") else CACHE_TTL
+    age = now - fetched
+    return 0 <= age < ttl
+
+
 def main():
-    names = sys.argv[1:]
+    names = list(dict.fromkeys(sys.argv[1:]))
     if not names:
         print("{}")
         return
 
     cache = load_cache()
-    try:
-        urls = aur_urls(names)
-    except Exception:
-        urls = {}
-
     out = {}
+    missing = []
     for name in names:
         cached = cache.get(name)
-        if cached and (time.time() - cached.get("fetched", 0)) < CACHE_TTL:
+        if cache_is_fresh(cached):
             out[name] = cached.get("value", {})
-            continue
-        value = lookup(name, urls.get(name, ""))
-        out[name] = value
-        cache[name] = {"fetched": time.time(), "value": value}
+        else:
+            missing.append(name)
+
+    if missing:
+        deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
+        try:
+            urls = aur_urls(missing, deadline)
+            rpc_error = ""
+        except Exception as exc:  # noqa: BLE001 - surfaced to the popup
+            urls = {}
+            rpc_error = "AUR RPC: " + str(exc)
+
+        for name in missing:
+            if rpc_error:
+                value = {"available": False, "repo": "", "commits": [], "error": rpc_error}
+            elif name not in urls:
+                value = {
+                    "available": False,
+                    "repo": "",
+                    "commits": [],
+                    "error": "Pacchetto non trovato nell'AUR",
+                }
+            else:
+                value = lookup(name, urls[name], deadline)
+            out[name] = value
+            cache[name] = {"fetched": time.time(), "value": value}
 
     save_cache(cache)
     print(json.dumps(out))

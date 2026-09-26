@@ -15,12 +15,13 @@ button to run the update.
 - Popup listing each upgradable package as `installed → latest`.
 - Package names are hyperlinks to their AUR page: clicking one opens it in your
   default browser.
-- A short per-package changelog when available: up to two lines, expandable on
-  click. At the moment this only works for projects hosted on GitHub.
+- A short per-package upstream commit list when available: up to two lines,
+  expandable on click. Supports projects hosted on GitHub or GitLab.
 - "Update with yay" button that runs the configured command in a floating
   terminal.
 - Hover tooltip summarising the pending updates.
-- Timeout-safe: a slow or unresponsive AUR query never blocks the shell.
+- Timeout-safe: AUR queries and changelog lookups have bounded runtimes and
+  never block the shell.
 
 ## Requirements
 
@@ -113,12 +114,12 @@ output itself.
 
 ### Changelog availability
 
-The per-package changelog is, for now, **only available for applications
-published on GitHub**. `bin/aur-changelog` resolves each package's upstream URL
-from the AUR RPC and, when that URL points at a GitHub repository, returns the
-most recent commit subjects (merge commits are skipped). Results are cached for
-six hours to stay within the unauthenticated GitHub API rate limit. Packages
-whose upstream is not on GitHub simply show no changelog.
+The per-package changelog is currently available for upstreams hosted on
+**GitHub or GitLab**. `bin/aur-changelog` resolves the upstream URL from the AUR
+RPC and returns recent commit subjects (merge commits are skipped). Successful
+results are cached for six hours; failed lookups are retried after five minutes.
+The complete lookup has a 30-second time budget, so a slow host cannot leave the
+popup loading indefinitely. Packages hosted elsewhere simply show no changelog.
 
 ## Repository layout
 

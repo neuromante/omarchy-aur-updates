@@ -68,16 +68,21 @@ BarWidget {
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
 
+  function shellQuote(value) {
+    return "'" + String(value).replace(/'/g, "'\\''") + "'"
+  }
+
   function runUpdate() {
     if (!root.bar || root.updateCommand === "") return
     // Run the update in a floating terminal and, the moment it exits, ask the
     // widget to re-check. A successful update therefore clears the pending
     // count right away instead of waiting for the next hourly poll, and a
     // partial/failed one immediately refreshes the remaining list.
-    var quoted = root.updateCommand.replace(/'/g, "'\\''")
     var recheck = "omarchy-shell -q neuromante.aur-updates refresh"
+    var script = root.updateCommand + "; " + recheck
+    var terminalCommand = "bash -lc " + root.shellQuote(script)
     root.bar.run("omarchy-launch-floating-terminal-with-presentation "
-                 + "\"bash -lc '" + quoted + "; " + recheck + "'\"")
+                 + root.shellQuote(terminalCommand))
   }
 
   // ---------------------------------------------------------------- polling
