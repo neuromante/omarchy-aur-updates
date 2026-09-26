@@ -129,6 +129,7 @@ BarWidget.qml      Bar icon, badge, polling, panel wiring
 Panel.qml          Detail popup (package list + update button)
 bin/aur-updates    yay query wrapper -> JSON
 bin/aur-changelog  upstream commit subjects -> JSON
+tests/             Helper parsing, cache and timeout tests
 CHANGELOG.md       Release history
 ```
 

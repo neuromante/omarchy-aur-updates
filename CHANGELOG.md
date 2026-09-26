@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-26
+
 ### Fixed
 
 - Treat malformed `yay` output and failed queries as errors instead of
@@ -15,12 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cached for six hours.
 - Bound the complete changelog lookup to 30 seconds and avoid an AUR RPC call
   when all requested package results are cached.
-- Quote the configured update command through both shell invocations so its
-  quotes and variable references are interpreted in the floating terminal.
 
 ### Changed
 
 - Document changelog support for GitHub and GitLab upstreams.
+- Quote the configured update command through both shell invocations so its
+  quotes and variable references are interpreted in the floating terminal.
+
+### Added
+
+- Add unit tests for yay output parsing, changelog cache expiry and lookup
+  timeouts.
 
 ## [1.2.0] - 2026-09-26
 
@@ -77,6 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Update with yay" button running the configurable `updateCommand` in a
   floating terminal.
 
+[Unreleased]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.1.0...v1.1.1
