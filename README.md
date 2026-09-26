@@ -55,7 +55,9 @@ omarchy plugin enable neuromante.aur-updates
 - Inside the popup: `r` re-checks, `Esc` closes, arrow keys scroll the list.
 - **Click a package name** in the popup: open its `aur.archlinux.org` page in
   the default browser.
-- The button launches the configured update command in a floating terminal.
+- The button launches the configured update command in a floating terminal;
+  when it exits, the widget re-checks automatically, so a successful update
+  clears the badge right away.
 
 ## Settings
 

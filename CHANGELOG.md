@@ -5,6 +5,15 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-09-25
+
+### Changed
+
+- The update button now re-checks as soon as the update command exits, so a
+  successful update clears the pending-count badge immediately instead of
+  waiting for the next hourly poll. A partial or failed update refreshes the
+  remaining list right away.
+
 ## [1.1.1] - 2026-09-25
 
 ### Changed
@@ -35,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Update with yay" button running the configurable `updateCommand` in a
   floating terminal.
 
+[1.1.2]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/neuromante/omarchy-aur-updates/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/neuromante/omarchy-aur-updates/releases/tag/v1.0.0
